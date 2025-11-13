@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from './context/AuthContext';
 import LoginPage from './components/Auth/LoginForm';
 import Navigation from './components/Layout/Navigation';
@@ -28,28 +28,28 @@ const AppContent: React.FC = () => {
   const [showInstitutionProfile, setShowInstitutionProfile] = useState(false);
 
   
+  // Charger le hash initial au montage du composant
   useEffect(() => {
-    const handleHashChange = () => {
-      const hash = window.location.hash.replace('#', '');
-      if (hash) {
-        setCurrentPage(hash);
-      }
-    };
-
-    // Écouter les changements de hash pour la navigation
-    window.addEventListener('hashchange', handleHashChange);
-    handleHashChange(); // Vérifie le hash initial
-
-    return () => window.removeEventListener('hashchange', handleHashChange);
+    const initialHash = window.location.hash.replace('#', '');
+    if (initialHash) {
+      setCurrentPage(initialHash);
+    }
   }, []);
+
+  // Mettre à jour le hash quand currentPage change
+  useEffect(() => {
+    window.location.hash = currentPage;
+  }, [currentPage]);
 
   // Vérifier si l'utilisateur institution doit remplir son profil
   // Fix: Utilisez optional chaining et un check fallback (name === email → nouveau user)
   useEffect(() => {
+    // Vérifier seulement au chargement initial ou si utilisateur change
     if (user?.role === 'institution' && (user.id?.startsWith('user_') || user.name === user.email)) {  // ← Fix: ?. et fallback
       console.log('Debug: Force profil pour nouveau user', { id: user.id, name: user.name, email: user.email });  // ← Debug temporaire
       setShowInstitutionProfile(true);
     }
+    // Ne pas inclure currentPage dans les dépendances pour éviter les réexécutions inutiles
   }, [user]);
 
   // ✅ autre useEffect, isolé
@@ -59,13 +59,6 @@ const AppContent: React.FC = () => {
       setSelectedInstitutionId(institutionId);
     }
   }, [currentPage]);
-
-  // ← Nouveau useEffect : Redirection automatique vers dashboard après login (basé sur rôle)
-  useEffect(() => {
-    if (user && currentPage !== 'dashboard') {
-      setCurrentPage('dashboard');  // Force 'dashboard' pour que le switch gère le rôle
-    }
-  }, [user]);
 
   if (loading) {
     return (
@@ -80,6 +73,8 @@ const AppContent: React.FC = () => {
   }
 
   const renderPage = () => {
+    console.log('Render page called with currentPage:', currentPage, 'and user role:', user?.role);
+
     // Si profil institution à remplir, redirigez vers profile
     if (showInstitutionProfile) {
       return <ProfilePage onComplete={() => setShowInstitutionProfile(false)} />;  // ← Ajout: onComplete pour cacher après
@@ -114,6 +109,7 @@ const AppContent: React.FC = () => {
     switch (currentPage) {
       case 'dashboard':
         // ← Fix : Inclure 'superviseur' comme admin pour redirection vers AdminDashboard
+        console.log('Rendering dashboard for role:', user?.role);
         return (user.role === 'admin' || user.role === 'superviseur') ? <AdminDashboard /> : <InstitutionDashboard />;
       case 'institutions':
         return <InstitutionsPage />;
@@ -140,9 +136,10 @@ const AppContent: React.FC = () => {
       case 'history':
         return <HistoryPage />;
       case 'questionnaire': // New case for the questionnaire page
+        console.log('Rendering QuestionnairePage - about to render');
         return <QuestionnairePage />;
       default:
-        
+        console.log('Page par défaut - currentPage:', currentPage, 'role:', user?.role);
         return (user.role === 'admin' || user.role === 'superviseur') ? <AdminDashboard /> : <InstitutionDashboard />;
     }
   };
@@ -151,7 +148,9 @@ const AppContent: React.FC = () => {
     <div className="min-h-screen bg-gray-50 flex">
       <Navigation currentPage={currentPage} onPageChange={setCurrentPage} />
       <main className="flex-1 ml-64 p-8">
-        {renderPage()}
+        <div key={currentPage}>
+          {renderPage()}
+        </div>
       </main>
     </div>
   );

@@ -131,11 +131,15 @@ export interface RiskThreshold {
   color: string; 
 }
 
+export interface SousSectionWithQuestions extends SousSection {
+  questions: Question[];
+}
+
 export interface SectionWithNested {
   id: string;
   name: string;
   coefficient: number;
   creeLe: string;
   modifieLe: string;
-  sousSections: SousSection[];
+  sousSections: SousSectionWithQuestions[];
 }

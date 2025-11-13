@@ -42,7 +42,7 @@ interface DataContextType {
   sectionsWithNested: SectionWithNested[];  // ← Structure nested complète
   loadSectionsWithNested: () => Promise<void>;  // ← Chargement nested
   getQuestionsForSousSection: (sousSectionId: string) => Question[];  // ← Filtre questions par sous-section
-  getSousSectionsForSection: (sectionId: string) => SousSection[];  // ← Filtre sous-sections par section
+  getSousSectionsForSection: (sectionId: string) => SousSectionWithQuestions[];  // ← Filtre sous-sections par section
   loadQuestionsForAxis: (axisId: string) => Promise<void>;  // ← Compatibilité (axisId = sousSectionId)
   updateInstitution: (id: string, updates: Partial<Institution>) => void;
   addCountry: (country: Country) => void;
@@ -152,8 +152,11 @@ const useDataStore = () => {
     creeLe: backendSection.creeLe,
     modifieLe: backendSection.modifieLe,
     sousSections: backendSection.sousSections.map((ss: any) => ({
-      id: ss.idSousSection,
-      name: ss.libelle,
+      ...ss, // Inclure tous les champs de la sous-section
+      id: ss.idSousSection, // Utiliser id pour compatibilité avec les composants existants
+      idSousSection: ss.idSousSection,
+      libelle: ss.libelle,
+      name: ss.libelle, // Ajout de name pour compatibilité avec les composants existants
       creeLe: ss.creeLe,
       modifieLe: ss.modifieLe,
       questions: ss.questions.map((q: any) => mapBackendToQuestion(q))  // Réutilise le mapping existant
@@ -278,10 +281,11 @@ const useDataStore = () => {
   };
 
   // ✅ NOUVEAUX UTILITAIRES
-  const getSousSectionsForSection = (sectionId: string): SousSection[] => {
+  const getSousSectionsForSection = (sectionId: string): SousSectionWithQuestions[] => {
     return sectionsWithNested.find(s => s.id === sectionId)?.sousSections || [];
   };
 
+  // Ancienne fonction pour compatibilité - mais il vaut mieux accéder directement aux questions via sousSections.questions
   const getQuestionsForSousSection = (sousSectionId: string): Question[] => {
     return sectionsWithNested
       .flatMap(s => s.sousSections)

@@ -1,14 +1,15 @@
 // src/components/Assessment/QuestionnairePage.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { useData } from '../../context/DataContext';
-import { Question, SectionWithNested, SousSection } from '../../types';
+import { useAuth } from '../../context/AuthContext';
+import { Question, SectionWithNested, SousSection, SousSectionWithQuestions } from '../../types';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
 import { Checkbox } from '../ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
-import toast from 'react-hot-toast';
+import { toast } from 'react-hot-toast';
 
 // Define a more specific type for answer values
 type AnswerValue = string | number | boolean | string[] | undefined;
@@ -21,20 +22,89 @@ interface Answer {
 }
 
 const QuestionnairePage: React.FC = () => {
+  const { user } = useAuth();
   const { sectionsWithNested, loadSectionsWithNested } = useData();
+
+  // Vérification de sécurité pour éviter les erreurs
+  if (!user) {
+    return <div>Utilisateur non connecté</div>;
+  }
   const [answers, setAnswers] = useState<{[questionId: string]: Answer}>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchQuestions = async () => {
-      setLoading(true);
-      await loadSectionsWithNested();
-      setLoading(false);
+    console.log('QuestionnairePage - loading data', { user: !!user, sectionsWithNested: sectionsWithNested?.length });
+
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+
+        // Vérifier que les données sont disponibles
+        if (!loadSectionsWithNested) {
+          console.error('loadSectionsWithNested is not available');
+          setLoading(false);
+          return;
+        }
+
+        await loadSectionsWithNested();
+
+        // Load previous answers if they exist and user has necessary properties
+        if (user && user.id) {
+          // Use institutionId if available, otherwise use user id as fallback
+          const institutionIdToUse = user.institutionId || user.id;
+          console.log('Attempting to load responses for:', institutionIdToUse);
+
+          // Vérifier que l'utilisateur a un token avant de faire la requête
+          if (!user.token) {
+            console.warn('User does not have a token, skipping response loading');
+            setLoading(false);
+            return;
+          }
+
+          const response = await fetch(`http://localhost:9090/api/responses/institution/${institutionIdToUse}`, {
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${user.token}`
+            }
+          });
+
+          if (response.ok) {
+            const existingResponses = await response.json();
+            const initialAnswers: {[questionId: string]: Answer} = {};
+
+            existingResponses.forEach((resp: any) => {
+              initialAnswers[resp.questionId] = {
+                questionId: resp.questionId,
+                value: resp.value,
+                justification: resp.justification,
+                comment: resp.comment
+              };
+            });
+
+            setAnswers(initialAnswers);
+            console.log('Previous answers loaded:', existingResponses.length);
+          } else {
+            console.warn('Failed to load previous responses:', response.status, response.statusText);
+            // Even if response loading fails, we can still continue with empty answers
+          }
+        } else {
+          console.warn('No user.id available to load previous answers');
+        }
+
+        setLoading(false);
+        console.log('QuestionnairePage - data loaded successfully', sectionsWithNested?.length, 'sections');
+      } catch (error) {
+        console.error('Error in QuestionnairePage useEffect:', error);
+        setLoading(false);
+        // Don't throw, just fail gracefully
+      }
     };
-    fetchQuestions();
-  }, [loadSectionsWithNested]);
+
+    fetchData();
+  }, [loadSectionsWithNested, user]);
 
   const handleAnswerChange = useCallback((questionId: string, value: AnswerValue, field: 'value' | 'justification' | 'comment' = 'value') => {
+    console.log('handleAnswerChange', questionId, value, field);
     setAnswers(prev => ({
       ...prev,
       [questionId]: {
@@ -45,6 +115,14 @@ const QuestionnairePage: React.FC = () => {
     }));
   }, []);
 
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-full">
+        <p>Chargement des questions...</p>
+      </div>
+    );
+  }
+
   const renderQuestionInput = (question: Question) => {
     const currentAnswer: AnswerValue = answers[question.id]?.value;
 
@@ -53,7 +131,7 @@ const QuestionnairePage: React.FC = () => {
         return (
           <RadioGroup
             onValueChange={(val) => handleAnswerChange(question.id, val === 'true')}
-            value={currentAnswer !== undefined ? String(currentAnswer) : undefined}
+            value={currentAnswer !== undefined ? String(currentAnswer) : ''}
           >
             <div className="flex items-center space-x-2">
               <RadioGroupItem value="true" id={`${question.id}-true`} />
@@ -149,20 +227,99 @@ const QuestionnairePage: React.FC = () => {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Submitted Answers:', answers);
-    toast.success('Answers submitted (check console)!');
-    // Here you would typically send 'answers' to your backend API
-  };
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-full">
-        <p>Chargement des questions...</p>
-      </div>
-    );
-  }
+    // Validation: check required questions are answered
+    const requiredQuestionsWithoutAnswers: string[] = [];
+    const requiredJustificationsWithoutAnswers: string[] = [];
+
+    for (const section of sectionsWithNested) {
+      for (const sousSection of section.sousSections) {
+        for (const question of sousSection.questions) {
+          // Check if required question has an answer
+          const answerValue = answers[question.id]?.value;
+          if (question.required) {
+            let hasValue = false;
+
+            if (answerValue !== undefined && answerValue !== null) {
+              if (typeof answerValue === 'string') {
+                hasValue = answerValue.trim() !== '';
+              } else if (typeof answerValue === 'boolean') {
+                hasValue = true; // Boolean values are always considered as having a value
+              } else if (Array.isArray(answerValue)) {
+                hasValue = answerValue.length > 0;
+              } else {
+                hasValue = true; // For numbers and other types
+              }
+            }
+
+            if (!hasValue) {
+              requiredQuestionsWithoutAnswers.push(question.label);
+            }
+          }
+
+          // Check if justification is required and missing
+          if (question.justificationRequired &&
+              (answers[question.id]?.justification === undefined ||
+              (typeof answers[question.id]?.justification === 'string' && answers[question.id]?.justification.trim() === ''))) {
+            requiredJustificationsWithoutAnswers.push(question.label);
+          }
+        }
+      }
+    }
+
+    // Show error if there are missing required answers
+    if (requiredQuestionsWithoutAnswers.length > 0 || requiredJustificationsWithoutAnswers.length > 0) {
+      let errorMessage = "Veuillez compléter les champs obligatoires:\n";
+
+      if (requiredQuestionsWithoutAnswers.length > 0) {
+        errorMessage += `- Questions: ${requiredQuestionsWithoutAnswers.slice(0, 3).join(', ')}${requiredQuestionsWithoutAnswers.length > 3 ? '...' : ''}\n`;
+      }
+
+      if (requiredJustificationsWithoutAnswers.length > 0) {
+        errorMessage += `- Justifications: ${requiredJustificationsWithoutAnswers.slice(0, 3).join(', ')}${requiredJustificationsWithoutAnswers.length > 3 ? '...' : ''}`;
+      }
+
+      toast.error(errorMessage);
+      return;
+    }
+
+    try {
+      // Prepare answers to send to the backend
+      const answersToSubmit = Object.entries(answers).map(([questionId, answer]) => {
+        return {
+          questionId,
+          value: answer.value,
+          justification: answer.justification,
+          comment: answer.comment
+        };
+      });
+
+      // Send answers to backend
+      const response = await fetch('http://localhost:9090/api/responses/submit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${user?.token}` // Using user token from auth context
+        },
+        body: JSON.stringify({
+          responses: answersToSubmit
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Erreur lors de l'envoi des réponses: ${errorText}`);
+      }
+
+      toast.success('Réponses soumises avec succès!');
+      console.log('Submitted Answers:', answers);
+    } catch (error) {
+      console.error('Erreur de soumission:', error);
+      toast.error('Erreur lors de l\'envoi des réponses');
+    }
+  };
 
   return (
     <div className="container mx-auto p-6">
@@ -175,7 +332,7 @@ const QuestionnairePage: React.FC = () => {
           sectionsWithNested.map((section: SectionWithNested) => (
             <div key={section.id} className="bg-white shadow-md rounded-lg p-6">
               <h2 className="text-2xl font-semibold mb-6 text-green-700">{section.name}</h2>
-              {section.sousSections.map((sousSection: SousSection) => (
+              {section.sousSections.map((sousSection: SousSectionWithQuestions) => (
                 <div key={sousSection.id} className="mb-8 border-l-4 border-green-200 pl-4">
                   <h3 className="text-xl font-medium mb-4 text-gray-700">{sousSection.libelle}</h3>
                   <div className="space-y-6">

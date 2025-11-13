@@ -7,7 +7,7 @@ import {
   Plus, Loader2, ChevronDown, Edit, Trash2, Settings, HelpCircle,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { SectionWithNested, SousSection, Question } from '../../types';
+import { SectionWithNested, SousSection, SousSectionWithQuestions, Question } from '../../types';
 
 const QuestionsPage: React.FC = () => {
   const { sectionsWithNested, getSousSectionsForSection, getQuestionsForSousSection } = useData();
@@ -44,14 +44,14 @@ const QuestionsPage: React.FC = () => {
     [sectionsWithNested, selectedSectionId]
   );
 
-  const sousSections: SousSection[] = useMemo(
+  const sousSections: SousSectionWithQuestions[] = useMemo(
     () => getSousSectionsForSection(selectedSectionId),
     [selectedSectionId, getSousSectionsForSection]
   );
 
   const allQuestionsInSection = useMemo(
-    () => sousSections.flatMap(ss => getQuestionsForSousSection(ss.id)),
-    [sousSections, getQuestionsForSousSection]
+    () => sousSections.flatMap(ss => ss.questions),
+    [sousSections]
   );
 
   // Réinitialise le formulaire
@@ -150,7 +150,7 @@ const QuestionsPage: React.FC = () => {
         <div className="flex flex-wrap gap-3">
           {sectionsWithNested.map((section) => {
             const count = getSousSectionsForSection(section.id)
-              .flatMap(ss => getQuestionsForSousSection(ss.id)).length;
+              .flatMap(ss => ss.questions).length;
             return (
               <button
                 key={section.id}
@@ -189,7 +189,7 @@ const QuestionsPage: React.FC = () => {
             </div>
           ) : (
             sousSections.map((sousSection) => {
-              const questions = getQuestionsForSousSection(sousSection.id);
+              const questions = sousSection.questions;
               const isExpanded = expandedSousSections.has(sousSection.id);
 
               return (
