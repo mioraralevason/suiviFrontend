@@ -1,0 +1,97 @@
+ D:\suivilbcft\
+    2 ├── .bolt\
+    3 │   ├── config.json
+    4 │   └── prompt
+    5 ├── .git\
+    6 ├── .gitignore
+    7 ├── components.json
+    8 ├── eslint.config.js
+    9 ├── index.html
+   10 ├── LICENSE
+   11 ├── node_modules\
+   12 ├── package-lock.json
+   13 ├── package.json
+   14 ├── postcss.config.js
+   15 ├── public\
+   16 │   └── assets\
+   17 │       └── logo.png
+   18 ├── README.md
+   19 ├── src\
+   20 │   ├── App.tsx
+   21 │   ├── assets\
+   22 │   │   └── logosamifin.jpeg
+   23 │   ├── components\
+   24 │   │   ├── Assessment\
+   25 │   │   │   ├── AssessmentPage.tsx
+   26 │   │   │   ├── DynamicRatingForm.tsx
+   27 │   │   │   ├── DynamicRatingFormPage.tsx
+   28 │   │   │   ├── FormSubmission.tsx
+   29 │   │   │   └── RatingForm\
+   30 │   │   ├── Auth\
+   31 │   │   │   ├── LoginForm.tsx
+   32 │   │   │   └── RegisterForm.tsx
+   33 │   │   ├── Dashboard\
+   34 │   │   │   ├── AdminDashboard.tsx
+   35 │   │   │   └── InstitutionDashboard.tsx
+   36 │   │   ├── hooks\
+   37 │   │   │   ├── useQuestions.ts
+   38 │   │   │   ├── useScoring.ts
+   39 │   │   │   └── useThresholds.ts
+   40 │   │   ├── Layout\
+   41 │   │   │   └── Navigation.tsx
+   42 │   │   ├── Management\
+   43 │   │   │   ├── CountriesPage.tsx
+   44 │   │   │   ├── EvaluationQuestionsPage.tsx
+   45 │   │   │   ├── EvaluationsPage.tsx
+   46 │   │   │   ├── ExampleScoringRuleManager.tsx
+   47 │   │   │   ├── Form_boolean.tsx
+   48 │   │   │   ├── Form_choice_multiple.tsx
+   49 │   │   │   ├── Form_choice_single.tsx
+   50 │   │   │   ├── Form_date.tsx
+   51 │   │   │   ├── Form_date_range.tsx
+   52 │   │   │   ├── Form_decimal.tsx
+   53 │   │   │   ├── Form_integer.tsx
+   54 │   │   │   ├── Form_percentage.tsx
+   55 │   │   │   ├── Form_range.tsx
+   56 │   │   │   ├── Form_text_long.tsx
+   57 │   │   │   ├── Form_text_short.tsx
+   58 │   │   │   ├── HistoryPage.tsx
+   59 │   │   │   ├── InstitutionDetailsPage.tsx
+   60 │   │   │   ├── InstitutionsPage.tsx
+   61 │   │   │   ├── ProfilePage.tsx
+   62 │   │   │   ├── QuestionForm.tsx
+   63 │   │   │   ├── QuestionsPage.tsx
+   64 │   │   │   ├── ScoringPage.tsx
+   65 │   │   │   ├── ScoringRuleForm.tsx
+   66 │   │   │   ├── ThresholdsPage.tsx
+   67 │   │   │   ├── ThresholdVisualization.tsx
+   68 │   │   │   ├── UsersPage.tsx
+   69 │   │   │   └── WeightsPage.tsx
+   70 │   │   ├── Reports\
+   71 │   │   │   └── ReportsPage.tsx
+   72 │   │   ├── ThresholdParameters.tsx
+   73 │   │   └── ui\
+   74 │   │       ├── button.tsx
+   75 │   │       ├── card.tsx
+   76 │   │       ├── label.tsx
+   77 │   │       ├── slider.tsx
+   78 │   │       └── tabs.tsx
+   79 │   ├── config\
+   80 │   │   └── api.ts
+   81 │   ├── context\
+   82 │   │   ├── AuthContext.tsx
+   83 │   │   └── DataContext.tsx
+   84 │   ├── index.css
+   85 │   ├── lib\
+   86 │   │   └── utils.ts
+   87 │   ├── main.tsx
+   88 │   ├── types\
+   89 │   │   └── index.ts
+   90 │   └── vite-env.d.ts
+   91 ├── structure
+   92 ├── tailwind.config.js
+   93 ├── test
+   94 ├── tsconfig.app.json
+   95 ├── tsconfig.json
+   96 ├── tsconfig.node.json
+   97 └── vite.config.ts
