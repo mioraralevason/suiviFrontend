@@ -4,4 +4,6 @@
         -regler les valeur enregister dans la base de donnée(valeur enregister dans la base est '[object Object],[object Object]')
         
 
-     
+apres connexion pour le role 'institution', ajouter une colonne 'valide at' et 'complited_info_at'
+ si 'completed_info_at' est encore null, l'utilisateur doit etre forcer à remplir les informations :
+    

@@ -5,11 +5,12 @@ import { Building2, User, Mail, Phone, Calendar, Users, DollarSign, MapPin, Cred
 
 const ProfilePage: React.FC = () => {
   const { user } = useAuth();
-  const { institutions, assessments } = useData();
+  const { institutions, assessments, loadInstitutionById } = useData();
   const [isEditing, setIsEditing] = useState(false);
   const [profileData, setProfileData] = useState({
     name: '',
     address: '',
+    description: '',
     sector: '',
     employeeCount: 0,
     annualRevenue: 0,
@@ -20,19 +21,51 @@ const ProfilePage: React.FC = () => {
       phone: ''
     }
   });
+  const [loading, setLoading] = useState(true);
 
   const institution = institutions.find(i => i.id === user?.institutionId);
   const institutionAssessments = assessments.filter(a => a.institutionId === user?.institutionId);
 
   useEffect(() => {
+    // Check if institution is loaded
     if (institution) {
       setProfileData({
-        name: institution.name,
-        address: institution.address || '',
+        name: institution.denominationSociale, // Use the new field name
+        address: institution.adresseSiegeSocial || institution.address || '',
+        description: institution.description || '',
         sector: institution.sector,
         employeeCount: institution.employeeCount || 0,
         annualRevenue: institution.annualRevenue || 0,
-        creationDate: institution.creationDate?.toISOString().split('T')[0] || '',
+        creationDate: institution.dateDebutOperations ? institution.dateDebutOperations.toISOString().split('T')[0] :
+                     (institution.creationDate ? institution.creationDate.toISOString().split('T')[0] : ''),
+        mainContact: institution.mainContact || { name: '', email: '', phone: '' }
+      });
+      setLoading(false);
+    } else if (user?.institutionId) {
+      // If institutionId is available but not loaded, try to load it
+      loadInstitutionById(user.institutionId).then(() => {
+        setLoading(false);
+      }).catch(() => {
+        setLoading(false);
+      });
+    } else {
+      // If no institutionId, just set loading to false
+      setLoading(false);
+    }
+  }, [institution, user?.institutionId, loadInstitutionById]);
+
+  // Update profileData when institution changes
+  useEffect(() => {
+    if (institution) {
+      setProfileData({
+        name: institution.denominationSociale, // Use the new field name
+        address: institution.adresseSiegeSocial || institution.address || '',
+        description: institution.description || '',
+        sector: institution.sector,
+        employeeCount: institution.employeeCount || 0,
+        annualRevenue: institution.annualRevenue || 0,
+        creationDate: institution.dateDebutOperations ? institution.dateDebutOperations.toISOString().split('T')[0] :
+                     (institution.creationDate ? institution.creationDate.toISOString().split('T')[0] : ''),
         mainContact: institution.mainContact || { name: '', email: '', phone: '' }
       });
     }
@@ -41,6 +74,9 @@ const ProfilePage: React.FC = () => {
   const handleSave = () => {
     // Sauvegarder les modifications
     console.log('Sauvegarde du profil:', profileData);
+    // TODO: Implement actual API call to update institution profile
+    // This would require an endpoint like PUT /api/institutions/{id}
+    // For now, we just display a success message
     setIsEditing(false);
     alert('Profil mis à jour avec succès !');
   };
@@ -60,14 +96,34 @@ const ProfilePage: React.FC = () => {
     return sectors[sector as keyof typeof sectors] || sector;
   };
 
-  if (!institution) {
+  if (loading) {
     return (
-      <div className="text-center py-12">
-        <Building2 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-        <h3 className="text-lg font-medium text-gray-900 mb-2">Institution non trouvée</h3>
-        <p className="text-gray-600">Impossible de charger les informations de votre institution.</p>
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500"></div>
       </div>
     );
+  }
+
+  if (!institution) {
+    if (user?.institutionId) {
+      return (
+        <div className="text-center py-12">
+          <Building2 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Institution non trouvée</h3>
+          <p className="text-gray-600">Impossible de charger les informations de votre institution.</p>
+          <p className="text-sm text-gray-500 mt-2">ID de l'institution: {user.institutionId}</p>
+        </div>
+      );
+    } else {
+      return (
+        <div className="text-center py-12">
+          <Building2 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Aucune institution associée</h3>
+          <p className="text-gray-600">Votre compte utilisateur n'est pas associé à une institution.</p>
+          <p className="text-sm text-gray-500 mt-2">Veuillez contacter l'administrateur pour associer votre compte à une institution.</p>
+        </div>
+      );
+    }
   }
 
   return (
@@ -148,6 +204,24 @@ const ProfilePage: React.FC = () => {
               />
             ) : (
               <p className="text-gray-900">{profileData.address || 'Non renseignée'}</p>
+            )}
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              <Building2 className="h-4 w-4 inline mr-2" />
+              Description
+            </label>
+            {isEditing ? (
+              <textarea
+                value={profileData.description}
+                onChange={(e) => setProfileData({...profileData, description: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                rows={3}
+                placeholder="Décrivez votre institution..."
+              />
+            ) : (
+              <p className="text-gray-900">{profileData.description || 'Non renseignée'}</p>
             )}
           </div>
 

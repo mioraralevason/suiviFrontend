@@ -9,8 +9,22 @@ export interface User {
 
 export interface Institution {
   id: string;
-  name: string;
+  name?: string; // Kept for backward compatibility
+  denominationSociale: string; // I2 - Dénomination sociale
+  nomCommercial?: string; // I3 - Nom commercial
+  formeJuridique?: string; // I4 - Forme juridique
+  dateDebutOperations?: Date; // I5 - Date de début des opérations
+  adresseSiegeSocial?: string; // I6 - Adresse du siège social
+  adresseActivitePrincipale?: string; // I7 - Adresse de l'activité principale
+  adressesSecondaires?: string; // I8 - Adresses secondaires
+  numeroTelephone?: string; // I9 - Téléphone
+  adresseEmail?: string; // I10 - Email
+  listeActivites?: string; // I11 - Liste des activités
+  activitePrincipale?: string; // I12 - Activité principale
+  activitesSecondaires?: string; // I13 - Activités secondaires
+  // Existing fields
   address?: string;
+  description?: string;
   sector: string;
   activities: string[];
   employeeCount?: number;
@@ -25,6 +39,42 @@ export interface Institution {
   lastAssessment?: Date;
   nextSupervision?: Date;
   score?: number;
+}
+
+// New interfaces for questionnaire responses
+export interface EpnfdSector {
+  idSector: string;
+  libelle: string;
+  description?: string;
+}
+
+export interface ActivityDetail {
+  idActivity: string;
+  libelle: string;
+  description?: string;
+}
+
+export interface InstitutionEpnfdResponse {
+  id: {
+    idInstitution: string;
+    idSector: string;
+  };
+  institution?: Institution;
+  epnfdSector?: EpnfdSector;
+  isApplicable: boolean;
+  createdAt: Date;
+}
+
+export interface InstitutionActivityResponse {
+  id: {
+    idInstitution: string;
+    idActivity: string;
+  };
+  institution?: Institution;
+  activityDetail?: ActivityDetail;
+  response?: boolean;
+  justification?: string;
+  createdAt: Date;
 }
 
 export interface Country {

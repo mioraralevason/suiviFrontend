@@ -71,44 +71,7 @@ const useDataStore = () => {
   const { user } = useAuth();
   const token = user?.token;
 
-  const [institutions, setInstitutions] = useState<Institution[]>([
-    {
-      id: 'inst_1',
-      name: 'BNI Madagascar',
-      address: '123 Avenue de l\'Indépendance, Antananarivo',
-      sector: 'banque',
-      activities: ['banque_de_detail', 'banque_d_entreprise'],
-      employeeCount: 250,
-      annualRevenue: 50000000,
-      creationDate: new Date('2010-01-15'),
-      mainContact: {
-        name: 'Jean Rakoto',
-        email: 'j.rakoto@bni.mg',
-        phone: '+261 20 22 123 45'
-      },
-      riskLevel: 'medium',
-      lastAssessment: new Date('2024-01-15'),
-      nextSupervision: new Date('2027-01-15'),
-      score: 3.2,
-    },
-    {
-      id: 'inst_2',
-      name: 'Société Générale Madagascar',
-      address: '456 Rue de la République, Antananarivo',
-      sector: 'banque',
-      activities: ['banque_de_detail', 'banque_d_investissement'],
-      employeeCount: 180,
-      annualRevenue: 35000000,
-      creationDate: new Date('2008-03-20'),
-      mainContact: {
-        name: 'Marie Razafy',
-        email: 'm.razafy@socgen.mg',
-        phone: '+261 20 22 678 90'
-      },
-      riskLevel: 'low',
-      score: 2.1,
-    },
-  ]);
+  const [institutions, setInstitutions] = useState<Institution[]>([]);
 
   const [countries] = useState<Country[]>([
     { code: 'KP', name: 'Corée du Nord', listType: 'blacklist' },
@@ -292,10 +255,155 @@ const useDataStore = () => {
       .find(ss => ss.id === sousSectionId)?.questions || [];
   };
 
+  // Fonction pour charger une institution spécifique par ID
+  const loadInstitutionById = async (institutionId: string) => {
+    if (!token || !institutionId) {
+      console.warn('Token ou institutionId manquant pour loadInstitutionById');
+      return;
+    }
+    try {
+      console.log('📌 Chargement de l\'institution spécifique:', institutionId);
+
+      const response = await fetch(`${API_BASE}/institutions/${institutionId}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Erreur chargement institution: ${errText}`);
+      }
+
+      const backendInstitution: any = await response.json();
+
+      // Convertir les dates et mapper les données backend aux types frontend
+      const mappedInstitution: Institution = {
+        id: backendInstitution.idInstitution || backendInstitution.id,
+        name: backendInstitution.nom || backendInstitution.name, // Kept for backward compatibility
+        denominationSociale: backendInstitution.denominationSociale || backendInstitution.libelle || backendInstitution.name || '',
+        nomCommercial: backendInstitution.nomCommercial,
+        formeJuridique: backendInstitution.formeJuridique,
+        dateDebutOperations: backendInstitution.dateDebutOperations ? new Date(backendInstitution.dateDebutOperations) : undefined,
+        adresseSiegeSocial: backendInstitution.adresseSiegeSocial || backendInstitution.adresse,
+        adresseActivitePrincipale: backendInstitution.adresseActivitePrincipale,
+        adressesSecondaires: backendInstitution.adressesSecondaires,
+        numeroTelephone: backendInstitution.numeroTelephone,
+        adresseEmail: backendInstitution.adresseEmail,
+        listeActivites: backendInstitution.listeActivites,
+        activitePrincipale: backendInstitution.activitePrincipale,
+        activitesSecondaires: backendInstitution.activitesSecondaires,
+        // Existing fields
+        address: backendInstitution.adresse || backendInstitution.address,
+        description: backendInstitution.description,
+        sector: backendInstitution.secteur || backendInstitution.sector,
+        activities: backendInstitution.activites || backendInstitution.activities || [],
+        employeeCount: backendInstitution.nombreEmployes || backendInstitution.employeeCount,
+        annualRevenue: backendInstitution.chiffreAffaire || backendInstitution.annualRevenue,
+        creationDate: backendInstitution.dateCreation ? new Date(backendInstitution.dateCreation) : undefined,
+        mainContact: backendInstitution.contactPrincipal || backendInstitution.mainContact || {
+          name: backendInstitution.nomContact || '',
+          email: backendInstitution.emailContact || '',
+          phone: backendInstitution.telephoneContact || ''
+        },
+        riskLevel: backendInstitution.niveauRisque || backendInstitution.riskLevel,
+        lastAssessment: backendInstitution.dateDerniereEvaluation ? new Date(backendInstitution.dateDerniereEvaluation) : undefined,
+        nextSupervision: backendInstitution.dateProchaineSupervision ? new Date(backendInstitution.dateProchaineSupervision) : undefined,
+        score: backendInstitution.score || backendInstitution.globalScore
+      };
+
+      // Mettre à jour uniquement les institutions en remplaçant ou ajoutant cette institution
+      setInstitutions(prev => {
+        const existingIndex = prev.findIndex(inst => inst.id === mappedInstitution.id);
+        if (existingIndex >= 0) {
+          // Remplacer l'institution existante
+          const updated = [...prev];
+          updated[existingIndex] = mappedInstitution;
+          return updated;
+        } else {
+          // Ajouter la nouvelle institution
+          return [...prev, mappedInstitution];
+        }
+      });
+
+      console.log('✅ Institution spécifique chargée:', mappedInstitution);
+    } catch (err) {
+      console.error('❌ Erreur loadInstitutionById:', err);
+      // Ne pas changer les institutions existantes en cas d'erreur
+    }
+  };
+
+  // Fonction pour charger toutes les institutions (pour admin/superviseur)
+  const loadInstitutions = async () => {
+    if (!token) {
+      console.warn('Token manquant pour loadInstitutions');
+      return;
+    }
+    try {
+      console.log('📌 Chargement de toutes les institutions...');
+
+      const response = await fetch(`${API_BASE}/institutions`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Erreur chargement institutions: ${errText}`);
+      }
+
+      const backendInstitutions: any[] = await response.json();
+
+      // Convertir les dates et mapper les données backend aux types frontend
+      const mappedInstitutions: Institution[] = backendInstitutions.map(inst => ({
+        id: inst.idInstitution || inst.id,
+        name: inst.nom || inst.name, // Kept for backward compatibility
+        denominationSociale: inst.denominationSociale || inst.libelle || inst.name || '',
+        nomCommercial: inst.nomCommercial,
+        formeJuridique: inst.formeJuridique,
+        dateDebutOperations: inst.dateDebutOperations ? new Date(inst.dateDebutOperations) : undefined,
+        adresseSiegeSocial: inst.adresseSiegeSocial || inst.adresse,
+        adresseActivitePrincipale: inst.adresseActivitePrincipale,
+        adressesSecondaires: inst.adressesSecondaires,
+        numeroTelephone: inst.numeroTelephone,
+        adresseEmail: inst.adresseEmail,
+        listeActivites: inst.listeActivites,
+        activitePrincipale: inst.activitePrincipale,
+        activitesSecondaires: inst.activitesSecondaires,
+        // Existing fields
+        address: inst.adresse || inst.address,
+        description: inst.description,
+        sector: inst.secteur || inst.sector,
+        activities: inst.activites || inst.activities || [],
+        employeeCount: inst.nombreEmployes || inst.employeeCount,
+        annualRevenue: inst.chiffreAffaire || inst.annualRevenue,
+        creationDate: inst.dateCreation ? new Date(inst.dateCreation) : undefined,
+        mainContact: inst.contactPrincipal || inst.mainContact || {
+          name: inst.nomContact || '',
+          email: inst.emailContact || '',
+          phone: inst.telephoneContact || ''
+        },
+        riskLevel: inst.niveauRisque || inst.riskLevel,
+        lastAssessment: inst.dateDerniereEvaluation ? new Date(inst.dateDerniereEvaluation) : undefined,
+        nextSupervision: inst.dateProchaineSupervision ? new Date(inst.dateProchaineSupervision) : undefined,
+        score: inst.score || inst.globalScore
+      }));
+
+      setInstitutions(mappedInstitutions);
+      console.log('✅ Toutes les institutions chargées:', mappedInstitutions);
+    } catch (err) {
+      console.error('❌ Erreur loadInstitutions:', err);
+      // Ne pas changer les institutions existantes en cas d'erreur
+    }
+  };
+
   // ... autres fonctions existantes (updateInstitution, etc.)
   const updateInstitution = (id: string, updates: Partial<Institution>) => {
-    setInstitutions(prev => 
-      prev.map(inst => 
+    setInstitutions(prev =>
+      prev.map(inst =>
         inst.id === id ? { ...inst, ...updates } : inst
       )
     );
@@ -345,12 +453,21 @@ const useDataStore = () => {
     setRiskThresholds(thresholds);
   };
 
-  // ✅ Effet pour charger nested au démarrage (remplace loadAxes)
+  // ✅ Effet pour charger les données au démarrage
   useEffect(() => {
     if (token) {
-      loadSectionsWithNested();  // Charge tout d'un coup
+      loadSectionsWithNested();  // Charge les sections et questions
+
+      // Charger les institutions selon le rôle de l'utilisateur
+      if (user?.role === 'admin' || user?.role === 'superviseur') {
+        // Les admins et superviseurs peuvent voir toutes les institutions
+        loadInstitutions();
+      } else if (user?.role === 'institution' && user.institutionId) {
+        // Pour les utilisateurs institution, charger uniquement leur institution
+        loadInstitutionById(user.institutionId);
+      }
     }
-  }, [token]);
+  }, [token, user]);
 
   return useMemo(() => ({
     institutions,
@@ -363,6 +480,8 @@ const useDataStore = () => {
     riskThresholds,
     sectionsWithNested,  // ← Exposé
     loadSectionsWithNested,  // ← Exposé
+    loadInstitutions,        // ← Exposé
+    loadInstitutionById,     // ← Exposé
     getSousSectionsForSection,  // ← Exposé
     getQuestionsForSousSection,  // ← Exposé
     loadQuestionsForAxis,  // ← Exposé (compatibilité)

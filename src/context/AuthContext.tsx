@@ -57,12 +57,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const data = await response.json();
       const loggedUser: User = {
-        id: data.id, // Assuming the API returns user ID
+        id: data.idUtilisateur || data.id, // Use the backend field name
         email,
-        name: data.name || email, // Use data.name if available, otherwise fallback to email
-        role: data.role as 'institution' | 'superviseur' | 'admin',
+        name: data.nom || data.name || email, // Use data.nom if available, otherwise fallback to email
+        role: (data.role && data.role.libelle) ? data.role.libelle as 'institution' | 'superviseur' | 'admin' : data.role || 'institution',
         token: data.token,
-        institutionId: data.institutionId, // Add this line
+        institutionId: data.institutionId || (data.institution && data.institution.idInstitution), // Get from nested institution object if needed
       };
       saveUser(loggedUser);
       return true;
