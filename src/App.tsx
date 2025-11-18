@@ -18,16 +18,18 @@ import HistoryPage from './components/Management/HistoryPage';
 import UsersPage from './components/Management/UsersPage';
 import EvaluationsPage from './components/Management/EvaluationsPage';
 import EvaluationQuestionsPage from './components/Management/EvaluationQuestionsPage';
-import QuestionnairePage from './components/Assessment/QuestionnairePage'; // Import the new component
+import QuestionnairePage from './components/Assessment/QuestionnairePage';
+import InstitutionalInfoCompletion from './components/Management/InstitutionalInfoCompletion';
 import { Toaster } from 'react-hot-toast';
+import { API_BASE } from './config/api'; // ✅ Import de la configuration API
 
 const AppContent: React.FC = () => {
-  const { user, loading } = useAuth();
+  const { user, token, loading } = useAuth();
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [selectedInstitutionId, setSelectedInstitutionId] = useState<string>('');
-  const [showInstitutionProfile, setShowInstitutionProfile] = useState(false);
+  const [needsInfoCompletion, setNeedsInfoCompletion] = useState(false);
+  const [checkingCompletion, setCheckingCompletion] = useState(true); // ✅ Nouvel état pour le chargement
 
-  
   // Charger le hash initial au montage du composant
   useEffect(() => {
     const initialHash = window.location.hash.replace('#', '');
@@ -41,18 +43,101 @@ const AppContent: React.FC = () => {
     window.location.hash = currentPage;
   }, [currentPage]);
 
-  // Vérifier si l'utilisateur institution doit remplir son profil
-  // Fix: Utilisez optional chaining et un check fallback (name === email → nouveau user)
+  // ✅ Vérifier le statut de complétion dès que l'utilisateur est chargé
   useEffect(() => {
-    // Vérifier seulement au chargement initial ou si utilisateur change
-    if (user?.role === 'institution' && (user.id?.startsWith('user_') || user.name === user.email)) {  // ← Fix: ?. et fallback
-      console.log('Debug: Force profil pour nouveau user', { id: user.id, name: user.name, email: user.email });  // ← Debug temporaire
-      setShowInstitutionProfile(true);
-    }
-    // Ne pas inclure currentPage dans les dépendances pour éviter les réexécutions inutiles
-  }, [user]);
+    const checkCompletionStatus = async () => {
+      console.log('=== DEBUG DÉBUT checkCompletionStatus ===');
+      console.log('User:', user);
+      console.log('User role:', user?.role);
+      console.log('Token exists:', !!token);
+      
+      // Si l'utilisateur n'est pas une institution, pas besoin de vérifier
+      if (!user || user.role !== 'institution') {
+        console.log('DEBUG: Pas une institution, skip vérification');
+        setCheckingCompletion(false);
+        return;
+      }
 
-  // ✅ autre useEffect, isolé
+      // Si pas de token, attendre
+      if (!token) {
+        console.log('DEBUG: Pas de token, skip vérification');
+        setCheckingCompletion(false);
+        return;
+      }
+
+      try {
+        const url = `${API_BASE}/institution/completion-status`;
+        console.log('DEBUG: Appel API:', url);
+        
+        const response = await fetch(url, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        console.log('DEBUG: Response status:', response.status);
+        console.log('DEBUG: Response headers:', response.headers.get('content-type'));
+        
+        // ✅ Vérifier d'abord si la réponse est OK
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('DEBUG: Erreur HTTP:', response.status, errorText);
+          // En cas d'erreur HTTP, on permet l'accès normal
+          setNeedsInfoCompletion(false);
+          setCheckingCompletion(false);
+          return;
+        }
+
+        // ✅ Lire le texte brut d'abord
+        const textResponse = await response.text();
+        console.log('DEBUG: Réponse brute (100 premiers chars):', textResponse.substring(0, 100));
+
+        // ✅ Vérifier si c'est du JSON valide
+        if (!textResponse || !textResponse.trim()) {
+          console.error('DEBUG: Réponse vide');
+          setNeedsInfoCompletion(false);
+          setCheckingCompletion(false);
+          return;
+        }
+
+        // ✅ Parser le JSON
+        let data;
+        try {
+          data = JSON.parse(textResponse);
+        } catch (parseError) {
+          console.error('DEBUG: Erreur parsing JSON:', parseError);
+          console.error('DEBUG: Texte reçu (200 premiers chars):', textResponse.substring(0, 200));
+          // Si ce n'est pas du JSON, on permet l'accès normal
+          setNeedsInfoCompletion(false);
+          setCheckingCompletion(false);
+          return;
+        }
+
+        console.log('DEBUG: Réponse parsée:', data);
+        console.log('DEBUG: needsCompletion:', data.needsCompletion);
+        
+        setNeedsInfoCompletion(data.needsCompletion === true);
+        console.log('DEBUG: État needsInfoCompletion mis à jour à:', data.needsCompletion);
+        
+      } catch (error) {
+        console.error('DEBUG: Erreur réseau ou autre:', error);
+        // 🔴 TEST TEMPORAIRE : En cas d'erreur, forcer l'affichage du formulaire
+        console.warn('⚠️ Erreur réseau - FORÇAGE du formulaire pour test');
+        setNeedsInfoCompletion(true);
+      } finally {
+        // ✅ Important : marquer la vérification comme terminée
+        console.log('DEBUG: Fin de vérification, checkingCompletion -> false');
+        setCheckingCompletion(false);
+      }
+      
+      console.log('=== DEBUG FIN checkCompletionStatus ===');
+    };
+
+    checkCompletionStatus();
+  }, [user, token]);
+
+  // Autre useEffect pour gérer l'ID d'institution
   useEffect(() => {
     if (currentPage.startsWith('evaluate-')) {
       const institutionId = currentPage.replace('evaluate-', '');
@@ -60,10 +145,19 @@ const AppContent: React.FC = () => {
     }
   }, [currentPage]);
 
-  if (loading) {
+  // ✅ Afficher un loader pendant la vérification ET le chargement initial
+  if (loading || (user?.role === 'institution' && checkingCompletion)) {
+    console.log('DEBUG: Affichage du loader');
+    console.log('loading:', loading);
+    console.log('checkingCompletion:', checkingCompletion);
+    console.log('user?.role:', user?.role);
+    
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-green-500"></div>
+        <div className="flex flex-col items-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-green-500"></div>
+          <p className="mt-4 text-gray-600">Vérification en cours...</p>
+        </div>
       </div>
     );
   }
@@ -73,11 +167,24 @@ const AppContent: React.FC = () => {
   }
 
   const renderPage = () => {
-    console.log('Render page called with currentPage:', currentPage, 'and user role:', user?.role);
+    console.log('=== DEBUG renderPage ===');
+    console.log('currentPage:', currentPage);
+    console.log('user?.role:', user?.role);
+    console.log('needsInfoCompletion:', needsInfoCompletion);
+    console.log('checkingCompletion:', checkingCompletion);
 
-    // Si profil institution à remplir, redirigez vers profile
-    if (showInstitutionProfile) {
-      return <ProfilePage onComplete={() => setShowInstitutionProfile(false)} />;  // ← Ajout: onComplete pour cacher après
+    // ✅ Si l'institution doit remplir son profil, afficher le formulaire
+    if (user?.role === 'institution' && needsInfoCompletion) {
+      console.log('DEBUG: Affichage du formulaire InstitutionalInfoCompletion');
+      return (
+        <InstitutionalInfoCompletion 
+          onComplete={() => {
+            console.log('DEBUG: onComplete appelé');
+            setNeedsInfoCompletion(false);
+            setCurrentPage('dashboard');
+          }} 
+        />
+      );
     }
 
     if (currentPage.startsWith('institution-details-')) {
@@ -108,7 +215,6 @@ const AppContent: React.FC = () => {
 
     switch (currentPage) {
       case 'dashboard':
-        // ← Fix : Inclure 'superviseur' comme admin pour redirection vers AdminDashboard
         console.log('Rendering dashboard for role:', user?.role);
         return (user.role === 'admin' || user.role === 'superviseur') ? <AdminDashboard /> : <InstitutionDashboard />;
       case 'institutions':
@@ -135,7 +241,7 @@ const AppContent: React.FC = () => {
         return <UsersPage />;
       case 'history':
         return <HistoryPage />;
-      case 'questionnaire': // New case for the questionnaire page
+      case 'questionnaire':
         console.log('Rendering QuestionnairePage - about to render');
         return <QuestionnairePage />;
       default:

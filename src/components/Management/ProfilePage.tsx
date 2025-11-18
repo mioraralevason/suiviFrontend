@@ -2,14 +2,34 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
 import { Building2, User, Mail, Phone, Calendar, Users, DollarSign, MapPin, CreditCard as Edit, Save, X } from 'lucide-react';
+import { API_BASE } from '../../config/api'; // ✅ Import de API_BASE
+import { toast } from 'react-hot-toast'; // ✅ Import de toast pour les notifications
 
 const ProfilePage: React.FC = () => {
-  const { user } = useAuth();
+  const { user, token } = useAuth(); // ✅ Récupérer le token depuis le contexte
   const { institutions, assessments, loadInstitutionById } = useData();
+  
+  // ✅ LOGS DE DEBUG
+  console.log('=== DEBUG ProfilePage ===');
+  console.log('User:', user);
+  console.log('User institutionId:', user?.institutionId);
+  console.log('Institutions disponibles:', institutions);
+  console.log('Nombre d\'institutions:', institutions.length);
+  
   const [isEditing, setIsEditing] = useState(false);
   const [profileData, setProfileData] = useState({
-    name: '',
-    address: '',
+    denominationSociale: '',
+    nomCommercial: '',
+    formeJuridique: '',
+    dateDebutOperations: '',
+    adresseSiegeSocial: '',
+    adresseActivitePrincipale: '',
+    adressesSecondaires: '',
+    numeroTelephone: '',
+    adresseEmail: '',
+    listeActivites: '',
+    activitePrincipale: '',
+    activitesSecondaires: '',
     description: '',
     sector: '',
     employeeCount: 0,
@@ -22,63 +42,138 @@ const ProfilePage: React.FC = () => {
     }
   });
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false); // ✅ État pour le bouton de sauvegarde
+  const [institutionData, setInstitutionData] = useState<any>(null); // ✅ Stocker l'institution directement
 
-  const institution = institutions.find(i => i.id === user?.institutionId);
+  // ✅ Charger l'institution de l'utilisateur connecté via l'API
+  useEffect(() => {
+    const fetchUserInstitution = async () => {
+      if (!user || user.role !== 'institution' || !token) {
+        console.log('DEBUG: Skip chargement institution - user:', user?.role, 'token:', !!token);
+        setLoading(false);
+        return;
+      }
+
+      try {
+        console.log('DEBUG: Chargement de l\'institution pour l\'utilisateur:', user.email);
+        
+        // ✅ Utiliser l'endpoint qui trouve l'institution par email utilisateur
+        const response = await fetch(`${API_BASE}/institution/by-user-email`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log('DEBUG: Institution récupérée:', data);
+          setInstitutionData(data);
+        } else {
+          const errorText = await response.text();
+          console.error('DEBUG: Erreur lors de la récupération de l\'institution:', response.status, errorText);
+        }
+      } catch (error) {
+        console.error('DEBUG: Error fetching user institution:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUserInstitution();
+  }, [user, token]);
+
+  // Utiliser institutionData au lieu de chercher dans institutions
+  const institution = institutionData || institutions.find(i => i.id === user?.institutionId);
   const institutionAssessments = assessments.filter(a => a.institutionId === user?.institutionId);
+  
+  // ✅ LOG SUPPLÉMENTAIRE
+  console.log('Institution trouvée:', institution);
+  console.log('Recherche avec ID:', user?.institutionId);
 
   useEffect(() => {
     // Check if institution is loaded
     if (institution) {
       setProfileData({
-        name: institution.denominationSociale, // Use the new field name
-        address: institution.adresseSiegeSocial || institution.address || '',
+        denominationSociale: institution.denominationSociale || '',
+        nomCommercial: institution.nomCommercial || '',
+        formeJuridique: institution.formeJuridique || '',
+        dateDebutOperations: institution.dateDebutOperations ? 
+          (typeof institution.dateDebutOperations === 'string' ? institution.dateDebutOperations.split('T')[0] : institution.dateDebutOperations.toISOString().split('T')[0]) :
+          (institution.creationDate ? 
+            (typeof institution.creationDate === 'string' ? institution.creationDate.split('T')[0] : institution.creationDate.toISOString().split('T')[0]) : ''),
+        adresseSiegeSocial: institution.adresseSiegeSocial || institution.address || '',
+        adresseActivitePrincipale: institution.adresseActivitePrincipale || '',
+        adressesSecondaires: institution.adressesSecondaires || '',
+        numeroTelephone: institution.numeroTelephone || '',
+        adresseEmail: institution.adresseEmail || '',
+        listeActivites: institution.listeActivites || '',
+        activitePrincipale: institution.activitePrincipale || '',
+        activitesSecondaires: institution.activitesSecondaires || '',
         description: institution.description || '',
-        sector: institution.sector,
+        sector: institution.sector || '',
         employeeCount: institution.employeeCount || 0,
         annualRevenue: institution.annualRevenue || 0,
-        creationDate: institution.dateDebutOperations ? institution.dateDebutOperations.toISOString().split('T')[0] :
-                     (institution.creationDate ? institution.creationDate.toISOString().split('T')[0] : ''),
-        mainContact: institution.mainContact || { name: '', email: '', phone: '' }
-      });
-      setLoading(false);
-    } else if (user?.institutionId) {
-      // If institutionId is available but not loaded, try to load it
-      loadInstitutionById(user.institutionId).then(() => {
-        setLoading(false);
-      }).catch(() => {
-        setLoading(false);
-      });
-    } else {
-      // If no institutionId, just set loading to false
-      setLoading(false);
-    }
-  }, [institution, user?.institutionId, loadInstitutionById]);
-
-  // Update profileData when institution changes
-  useEffect(() => {
-    if (institution) {
-      setProfileData({
-        name: institution.denominationSociale, // Use the new field name
-        address: institution.adresseSiegeSocial || institution.address || '',
-        description: institution.description || '',
-        sector: institution.sector,
-        employeeCount: institution.employeeCount || 0,
-        annualRevenue: institution.annualRevenue || 0,
-        creationDate: institution.dateDebutOperations ? institution.dateDebutOperations.toISOString().split('T')[0] :
-                     (institution.creationDate ? institution.creationDate.toISOString().split('T')[0] : ''),
+        creationDate: institution.dateDebutOperations ? 
+          (typeof institution.dateDebutOperations === 'string' ? institution.dateDebutOperations.split('T')[0] : institution.dateDebutOperations.toISOString().split('T')[0]) :
+          (institution.creationDate ? 
+            (typeof institution.creationDate === 'string' ? institution.creationDate.split('T')[0] : institution.creationDate.toISOString().split('T')[0]) : ''),
         mainContact: institution.mainContact || { name: '', email: '', phone: '' }
       });
     }
   }, [institution]);
 
-  const handleSave = () => {
-    // Sauvegarder les modifications
-    console.log('Sauvegarde du profil:', profileData);
-    // TODO: Implement actual API call to update institution profile
-    // This would require an endpoint like PUT /api/institutions/{id}
-    // For now, we just display a success message
-    setIsEditing(false);
-    alert('Profil mis à jour avec succès !');
+  const handleSave = async () => {
+    // ✅ Vérifier que le token existe
+    if (!token) {
+      toast.error('Vous devez être connecté pour modifier le profil');
+      return;
+    }
+
+    setSaving(true);
+    
+    try {
+      // ✅ Utiliser API_BASE et le token depuis le contexte
+      const response = await fetch(`${API_BASE}/institution/update-info`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          denominationSociale: profileData.denominationSociale,
+          nomCommercial: profileData.nomCommercial,
+          formeJuridique: profileData.formeJuridique,
+          dateDebutOperations: profileData.dateDebutOperations,
+          adresseSiegeSocial: profileData.adresseSiegeSocial,
+          adresseActivitePrincipale: profileData.adresseActivitePrincipale,
+          adressesSecondaires: profileData.adressesSecondaires,
+          numeroTelephone: profileData.numeroTelephone,
+          adresseEmail: profileData.adresseEmail,
+          listeActivites: profileData.listeActivites,
+          activitePrincipale: profileData.activitePrincipale,
+          activitesSecondaires: profileData.activitesSecondaires,
+        })
+      });
+
+      if (response.ok) {
+        setIsEditing(false);
+        toast.success('Profil mis à jour avec succès !');
+        
+        // ✅ Recharger les données de l'institution
+        if (user?.institutionId) {
+          loadInstitutionById(user.institutionId);
+        }
+      } else {
+        const errorText = await response.text();
+        toast.error(errorText || 'Erreur lors de la mise à jour du profil');
+      }
+    } catch (error) {
+      console.error('Error saving profile:', error);
+      toast.error('Erreur de connexion au serveur');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const getSectorLabel = (sector: string) => {
@@ -135,32 +230,260 @@ const ProfilePage: React.FC = () => {
         </div>
         <button
           onClick={() => isEditing ? handleSave() : setIsEditing(true)}
-          className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2"
+          disabled={saving}
+          className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {isEditing ? <Save className="h-5 w-5" /> : <Edit className="h-5 w-5" />}
-          <span>{isEditing ? 'Sauvegarder' : 'Modifier'}</span>
+          {saving ? (
+            <>
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+              <span>Enregistrement...</span>
+            </>
+          ) : (
+            <>
+              {isEditing ? <Save className="h-5 w-5" /> : <Edit className="h-5 w-5" />}
+              <span>{isEditing ? 'Sauvegarder' : 'Modifier'}</span>
+            </>
+          )}
         </button>
       </div>
 
       {/* Informations générales */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h2 className="text-xl font-semibold text-gray-900 mb-6">Informations Générales</h2>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               <Building2 className="h-4 w-4 inline mr-2" />
-              Nom de l'institution
+              Dénomination sociale
             </label>
             {isEditing ? (
               <input
                 type="text"
-                value={profileData.name}
-                onChange={(e) => setProfileData({...profileData, name: e.target.value})}
+                value={profileData.denominationSociale}
+                onChange={(e) => setProfileData({...profileData, denominationSociale: e.target.value})}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
               />
             ) : (
-              <p className="text-gray-900 font-medium">{profileData.name}</p>
+              <p className="text-gray-900 font-medium">{profileData.denominationSociale}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              <Building2 className="h-4 w-4 inline mr-2" />
+              Nom commercial
+            </label>
+            {isEditing ? (
+              <input
+                type="text"
+                value={profileData.nomCommercial}
+                onChange={(e) => setProfileData({...profileData, nomCommercial: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              />
+            ) : (
+              <p className="text-gray-900 font-medium">{profileData.nomCommercial || 'Non renseigné'}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              <Building2 className="h-4 w-4 inline mr-2" />
+              Forme juridique
+            </label>
+            {isEditing ? (
+              <select
+                value={profileData.formeJuridique}
+                onChange={(e) => setProfileData({...profileData, formeJuridique: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              >
+                <option value="">Sélectionnez une forme juridique</option>
+                <option value="SA">SA - Société Anonyme</option>
+                <option value="SARL">SARL - Société à Responsabilité Limitée</option>
+                <option value="SNC">SNC - Société en Nom Collectif</option>
+                <option value="SCS">SCS - Société en Commandite Simple</option>
+                <option value="SCA">SCA - Société en Commandite par Actions</option>
+                <option value="EI">EI - Entreprise Individuelle</option>
+                <option value="EURL">EURL - Entreprise Unipersonnelle à Responsabilité Limitée</option>
+                <option value="SAS">SAS - Société par Actions Simplifiée</option>
+                <option value="Autre">Autre</option>
+              </select>
+            ) : (
+              <p className="text-gray-900 font-medium">{profileData.formeJuridique || 'Non renseigné'}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              <Calendar className="h-4 w-4 inline mr-2" />
+              Date de début des opérations
+            </label>
+            {isEditing ? (
+              <input
+                type="date"
+                value={profileData.dateDebutOperations}
+                onChange={(e) => setProfileData({...profileData, dateDebutOperations: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              />
+            ) : (
+              <p className="text-gray-900 font-medium">
+                {profileData.dateDebutOperations ? new Date(profileData.dateDebutOperations).toLocaleDateString() : 'Non renseigné'}
+              </p>
+            )}
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              <MapPin className="h-4 w-4 inline mr-2" />
+              Adresse du siège social
+            </label>
+            {isEditing ? (
+              <textarea
+                value={profileData.adresseSiegeSocial}
+                onChange={(e) => setProfileData({...profileData, adresseSiegeSocial: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                rows={2}
+              />
+            ) : (
+              <p className="text-gray-900">{profileData.adresseSiegeSocial || 'Non renseigné'}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              <MapPin className="h-4 w-4 inline mr-2" />
+              Adresse de l'activité principale
+            </label>
+            {isEditing ? (
+              <textarea
+                value={profileData.adresseActivitePrincipale}
+                onChange={(e) => setProfileData({...profileData, adresseActivitePrincipale: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                rows={2}
+              />
+            ) : (
+              <p className="text-gray-900">{profileData.adresseActivitePrincipale || 'Non renseigné'}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              <MapPin className="h-4 w-4 inline mr-2" />
+              Adresses secondaires / succursales
+            </label>
+            {isEditing ? (
+              <textarea
+                value={profileData.adressesSecondaires}
+                onChange={(e) => setProfileData({...profileData, adressesSecondaires: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                rows={2}
+              />
+            ) : (
+              <p className="text-gray-900">{profileData.adressesSecondaires || 'Non renseigné'}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              <Phone className="h-4 w-4 inline mr-2" />
+              Numéro de téléphone
+            </label>
+            {isEditing ? (
+              <input
+                type="tel"
+                value={profileData.numeroTelephone}
+                onChange={(e) => setProfileData({...profileData, numeroTelephone: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              />
+            ) : (
+              <p className="text-gray-900 font-medium">{profileData.numeroTelephone || 'Non renseigné'}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              <Mail className="h-4 w-4 inline mr-2" />
+              Adresse email
+            </label>
+            {isEditing ? (
+              <input
+                type="email"
+                value={profileData.adresseEmail}
+                onChange={(e) => setProfileData({...profileData, adresseEmail: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              />
+            ) : (
+              <p className="text-gray-900 font-medium">{profileData.adresseEmail || 'Non renseigné'}</p>
+            )}
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              <Building2 className="h-4 w-4 inline mr-2" />
+              Liste des activités effectuées
+            </label>
+            {isEditing ? (
+              <textarea
+                value={profileData.listeActivites}
+                onChange={(e) => setProfileData({...profileData, listeActivites: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                rows={2}
+              />
+            ) : (
+              <p className="text-gray-900">{profileData.listeActivites || 'Non renseigné'}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              <Building2 className="h-4 w-4 inline mr-2" />
+              Activité principale
+            </label>
+            {isEditing ? (
+              <input
+                type="text"
+                value={profileData.activitePrincipale}
+                onChange={(e) => setProfileData({...profileData, activitePrincipale: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              />
+            ) : (
+              <p className="text-gray-900 font-medium">{profileData.activitePrincipale || 'Non renseigné'}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              <Building2 className="h-4 w-4 inline mr-2" />
+              Activités secondaires
+            </label>
+            {isEditing ? (
+              <textarea
+                value={profileData.activitesSecondaires}
+                onChange={(e) => setProfileData({...profileData, activitesSecondaires: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                rows={2}
+              />
+            ) : (
+              <p className="text-gray-900">{profileData.activitesSecondaires || 'Non renseigné'}</p>
+            )}
+          </div>
+
+          {/* Additional information fields that were in the original form */}
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              <Building2 className="h-4 w-4 inline mr-2" />
+              Description
+            </label>
+            {isEditing ? (
+              <textarea
+                value={profileData.description}
+                onChange={(e) => setProfileData({...profileData, description: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                rows={3}
+                placeholder="Décrivez votre institution..."
+              />
+            ) : (
+              <p className="text-gray-900">{profileData.description || 'Non renseignée'}</p>
             )}
           </div>
 
@@ -187,41 +510,6 @@ const ProfilePage: React.FC = () => {
               </select>
             ) : (
               <p className="text-gray-900 font-medium">{getSectorLabel(profileData.sector)}</p>
-            )}
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              <MapPin className="h-4 w-4 inline mr-2" />
-              Adresse
-            </label>
-            {isEditing ? (
-              <textarea
-                value={profileData.address}
-                onChange={(e) => setProfileData({...profileData, address: e.target.value})}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                rows={2}
-              />
-            ) : (
-              <p className="text-gray-900">{profileData.address || 'Non renseignée'}</p>
-            )}
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              <Building2 className="h-4 w-4 inline mr-2" />
-              Description
-            </label>
-            {isEditing ? (
-              <textarea
-                value={profileData.description}
-                onChange={(e) => setProfileData({...profileData, description: e.target.value})}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                rows={3}
-                placeholder="Décrivez votre institution..."
-              />
-            ) : (
-              <p className="text-gray-900">{profileData.description || 'Non renseignée'}</p>
             )}
           </div>
 
@@ -256,25 +544,6 @@ const ProfilePage: React.FC = () => {
               />
             ) : (
               <p className="text-gray-900 font-medium">{profileData.annualRevenue.toLocaleString()} Ar</p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              <Calendar className="h-4 w-4 inline mr-2" />
-              Date de création
-            </label>
-            {isEditing ? (
-              <input
-                type="date"
-                value={profileData.creationDate}
-                onChange={(e) => setProfileData({...profileData, creationDate: e.target.value})}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              />
-            ) : (
-              <p className="text-gray-900 font-medium">
-                {profileData.creationDate ? new Date(profileData.creationDate).toLocaleDateString() : 'Non renseignée'}
-              </p>
             )}
           </div>
         </div>
@@ -380,17 +649,28 @@ const ProfilePage: React.FC = () => {
         <div className="flex justify-end space-x-3">
           <button
             onClick={() => setIsEditing(false)}
-            className="bg-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-400 transition-colors flex items-center space-x-2"
+            disabled={saving}
+            className="bg-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-400 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <X className="h-5 w-5" />
             <span>Annuler</span>
           </button>
           <button
             onClick={handleSave}
-            className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2"
+            disabled={saving}
+            className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Save className="h-5 w-5" />
-            <span>Sauvegarder</span>
+            {saving ? (
+              <>
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                <span>Enregistrement...</span>
+              </>
+            ) : (
+              <>
+                <Save className="h-5 w-5" />
+                <span>Sauvegarder</span>
+              </>
+            )}
           </button>
         </div>
       )}

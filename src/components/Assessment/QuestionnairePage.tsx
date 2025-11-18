@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context/AuthContext';
-import { Question, SectionWithNested, SousSection, SousSectionWithQuestions } from '../../types';
+import { Question } from '../../types';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Button } from '../ui/button';
@@ -10,10 +10,9 @@ import { Textarea } from '../ui/textarea';
 import { Checkbox } from '../ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
 import { toast } from 'react-hot-toast';
+import { ChevronLeft, ChevronRight, CheckCircle, ChevronDown, ChevronUp } from 'lucide-react';
 
-// Define a more specific type for answer values
 type AnswerValue = string | number | boolean | string[] | undefined;
-
 interface Answer {
   questionId: string;
   value: AnswerValue;
@@ -23,370 +22,357 @@ interface Answer {
 
 const QuestionnairePage: React.FC = () => {
   const { user } = useAuth();
-  const { sectionsWithNested, loadSectionsWithNested } = useData();
+  const { sectionsWithNested } = useData();
 
-  // Vérification de sécurité pour éviter les erreurs
-  if (!user) {
-    return <div>Utilisateur non connecté</div>;
-  }
-  const [answers, setAnswers] = useState<{[questionId: string]: Answer}>({});
+  const [answers, setAnswers] = useState<{ [questionId: string]: Answer }>({});
+  const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [openSubSections, setOpenSubSections] = useState<{ [key: string]: boolean }>({});
 
+  const sections = sectionsWithNested || [];
+  const currentSection = sections[currentSectionIndex];
+  const isFirstSection = currentSectionIndex === 0;
+  const isLastSection = currentSectionIndex === sections.length - 1;
+
+  // Ouvrir la première sous-section par défaut
   useEffect(() => {
-    console.log('QuestionnairePage - loading data', { user: !!user, sectionsWithNested: sectionsWithNested?.length });
+    if (currentSection?.sousSections?.[0]) {
+      setOpenSubSections({ [currentSection.sousSections[0].id]: true });
+    }
+  }, [currentSection]);
 
-    const fetchData = async () => {
+  // Chargement des réponses précédentes
+  useEffect(() => {
+    if (!user?.token || sections.length === 0) return;
+
+    const loadAnswers = async () => {
+      const institutionId = user.institutionId || user.id;
+      if (!institutionId) {
+        setLoading(false);
+        return;
+      }
+
       try {
-        setLoading(true);
-
-        // Vérifier que les données sont disponibles
-        if (!loadSectionsWithNested) {
-          console.error('loadSectionsWithNested is not available');
-          setLoading(false);
-          return;
-        }
-
-        await loadSectionsWithNested();
-
-        // Load previous answers if they exist and user has necessary properties
-        if (user && user.id) {
-          // Use institutionId if available, otherwise use user id as fallback
-          const institutionIdToUse = user.institutionId || user.id;
-          console.log('Attempting to load responses for:', institutionIdToUse);
-
-          // Vérifier que l'utilisateur a un token avant de faire la requête
-          if (!user.token) {
-            console.warn('User does not have a token, skipping response loading');
-            setLoading(false);
-            return;
-          }
-
-          const response = await fetch(`http://localhost:9090/api/responses/institution/${institutionIdToUse}`, {
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${user.token}`
-            }
+        const res = await fetch(`http://localhost:9090/api/responses/institution/${institutionId}`, {
+          headers: { Authorization: `Bearer ${user.token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const loaded: Record<string, Answer> = {};
+          data.forEach((r: any) => {
+            loaded[r.questionId] = {
+              questionId: r.questionId,
+              value: r.value,
+              justification: r.justification || '',
+              comment: r.comment || '',
+            };
           });
-
-          if (response.ok) {
-            const existingResponses = await response.json();
-            const initialAnswers: {[questionId: string]: Answer} = {};
-
-            existingResponses.forEach((resp: any) => {
-              initialAnswers[resp.questionId] = {
-                questionId: resp.questionId,
-                value: resp.value,
-                justification: resp.justification,
-                comment: resp.comment
-              };
-            });
-
-            setAnswers(initialAnswers);
-            console.log('Previous answers loaded:', existingResponses.length);
-          } else {
-            console.warn('Failed to load previous responses:', response.status, response.statusText);
-            // Even if response loading fails, we can still continue with empty answers
-          }
-        } else {
-          console.warn('No user.id available to load previous answers');
+          setAnswers(loaded);
         }
-
+      } catch (err) {
+        console.error('Erreur chargement réponses:', err);
+      } finally {
         setLoading(false);
-        console.log('QuestionnairePage - data loaded successfully', sectionsWithNested?.length, 'sections');
-      } catch (error) {
-        console.error('Error in QuestionnairePage useEffect:', error);
-        setLoading(false);
-        // Don't throw, just fail gracefully
       }
     };
 
-    fetchData();
-  }, [loadSectionsWithNested, user]);
+    loadAnswers();
+  }, [user?.token, user?.institutionId, user?.id, sections.length]);
 
-  const handleAnswerChange = useCallback((questionId: string, value: AnswerValue, field: 'value' | 'justification' | 'comment' = 'value') => {
-    console.log('handleAnswerChange', questionId, value, field);
+  const toggleSubSection = (subSectionId: string) => {
+    setOpenSubSections(prev => ({
+      ...prev,
+      [subSectionId]: !prev[subSectionId]
+    }));
+  };
+
+  const handleAnswerChange = useCallback((
+    questionId: string,
+    value: AnswerValue,
+    field: 'value' | 'justification' | 'comment' = 'value'
+  ) => {
     setAnswers(prev => ({
       ...prev,
-      [questionId]: {
-        ...prev[questionId],
-        questionId,
-        [field]: value,
-      },
+      [questionId]: { ...prev[questionId], questionId, [field]: value },
     }));
   }, []);
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-full">
-        <p>Chargement des questions...</p>
-      </div>
-    );
-  }
+  const saveProgress = async () => {
+    if (saving || Object.keys(answers).length === 0) return;
+    setSaving(true);
+    try {
+      await fetch('http://localhost:9090/api/responses/submit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user?.token}`,
+        },
+        body: JSON.stringify({
+          responses: Object.values(answers).map(a => ({
+            questionId: a.questionId,
+            value: a.value,
+            justification: a.justification,
+            comment: a.comment,
+          })),
+        }),
+      });
+      toast.success('Sauvegardé');
+    } catch (err) {
+      toast.error('Échec sauvegarde');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const goNext = () => {
+    saveProgress();
+    setCurrentSectionIndex(i => Math.min(i + 1, sections.length - 1));
+  };
+
+  const goPrev = () => {
+    saveProgress();
+    setCurrentSectionIndex(i => Math.max(i - 1, 0));
+  };
+
+  const handleFinalSubmit = async () => {
+    const missing = sections
+      .flatMap(s => s.sousSections.flatMap(ss => ss.questions))
+      .filter(q => q.required && !answers[q.id]?.value)
+      .map(q => q.label);
+
+    if (missing.length > 0) {
+      toast.error(`Il manque ${missing.length} réponse(s) obligatoire(s)`);
+      return;
+    }
+
+    await saveProgress();
+    toast.success('Questionnaire soumis avec succès !', {
+      icon: <CheckCircle className="w-6 h-6 text-green-600" />,
+      duration: 5000,
+    });
+  };
 
   const renderQuestionInput = (question: Question) => {
-    const currentAnswer: AnswerValue = answers[question.id]?.value;
+    const val = answers[question.id]?.value;
 
     switch (question.type) {
       case 'boolean':
         return (
-          <RadioGroup
-            onValueChange={(val) => handleAnswerChange(question.id, val === 'true')}
-            value={currentAnswer !== undefined ? String(currentAnswer) : ''}
-          >
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="true" id={`${question.id}-true`} />
-              <Label htmlFor={`${question.id}-true`}>Oui</Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="false" id={`${question.id}-false`} />
-              <Label htmlFor={`${question.id}-false`}>Non</Label>
+          <RadioGroup onValueChange={(v) => handleAnswerChange(question.id, v === 'true')} value={val !== undefined ? String(val) : ''}>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="true" id={`${question.id}-oui`} />
+                <Label htmlFor={`${question.id}-oui`} className="text-xs">Oui</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="false" id={`${question.id}-non`} />
+                <Label htmlFor={`${question.id}-non`} className="text-xs">Non</Label>
+              </div>
             </div>
           </RadioGroup>
         );
+
       case 'choice_single':
         return (
-          <RadioGroup
-            onValueChange={(val) => handleAnswerChange(question.id, val)}
-            value={currentAnswer as string || ''}
-          >
-            {question.dropdownOptions?.map(option => (
-              <div key={option} className="flex items-center space-x-2">
-                <RadioGroupItem value={option} id={`${question.id}-${option}`} />
-                <Label htmlFor={`${question.id}-${option}`}>{option}</Label>
+          <RadioGroup onValueChange={(v) => handleAnswerChange(question.id, v)} value={val as string || ''}>
+            {question.dropdownOptions?.map(opt => (
+              <div key={opt} className="flex items-center space-x-2">
+                <RadioGroupItem value={opt} id={`${question.id}-${opt}`} />
+                <Label htmlFor={`${question.id}-${opt}`} className="text-xs">{opt}</Label>
               </div>
             ))}
           </RadioGroup>
         );
+
       case 'choice_multiple':
         return (
-          <div>
-            {question.dropdownOptions?.map(option => (
-              <div key={option} className="flex items-center space-x-2">
+          <div className="space-y-1">
+            {question.dropdownOptions?.map(opt => (
+              <div key={opt} className="flex items-center space-x-2">
                 <Checkbox
-                  id={`${question.id}-${option}`}
-                  checked={(currentAnswer as string[])?.includes(option) || false}
+                  checked={(val as string[])?.includes(opt) || false}
                   onCheckedChange={(checked) => {
-                    const newValues = checked
-                      ? [...((currentAnswer as string[]) || []), option]
-                      : ((currentAnswer as string[]) || []).filter((val: string) => val !== option);
-                    handleAnswerChange(question.id, newValues);
+                    const arr = (val as string[]) || [];
+                    const newArr = checked ? [...arr, opt] : arr.filter(x => x !== opt);
+                    handleAnswerChange(question.id, newArr);
                   }}
                 />
-                <Label htmlFor={`${question.id}-${option}`}>{option}</Label>
+                <Label className="text-xs">{opt}</Label>
               </div>
             ))}
           </div>
         );
+
       case 'percentage':
       case 'integer':
       case 'decimal':
-        return (
-          <Input
-            type="number"
-            value={currentAnswer as number || ''}
-            onChange={(e) => handleAnswerChange(question.id, e.target.value === '' ? undefined : Number(e.target.value))}
-            placeholder={question.type === 'percentage' ? '0-100' : ''}
-            min={question.min}
-            max={question.max}
-          />
-        );
+        return <Input type="number" value={val ?? ''} onChange={e => handleAnswerChange(question.id, e.target.value ? Number(e.target.value) : undefined)} placeholder="Nombre" className="text-xs h-8" />;
+
       case 'date':
-        return (
-          <Input
-            type="date"
-            value={currentAnswer as string || ''}
-            onChange={(e) => handleAnswerChange(question.id, e.target.value)}
-          />
-        );
-      case 'date_range':
-        return (
-          <Input
-            type="text"
-            value={currentAnswer as string || ''}
-            onChange={(e) => handleAnswerChange(question.id, e.target.value)}
-            placeholder="YYYY-MM-DD to YYYY-MM-DD"
-          />
-        );
+        return <Input type="date" value={val as string || ''} onChange={e => handleAnswerChange(question.id, e.target.value)} className="text-xs h-8" />;
+
       case 'text_short':
-        return (
-          <Input
-            type="text"
-            value={currentAnswer as string || ''}
-            onChange={(e) => handleAnswerChange(question.id, e.target.value)}
-          />
-        );
+        return <Input type="text" value={val as string || ''} onChange={e => handleAnswerChange(question.id, e.target.value)} placeholder="Réponse" className="text-xs h-8" />;
+
       case 'text_long':
-        return (
-          <Textarea
-            value={answers[question.id]?.value as string || ''}
-            onChange={(e) => handleAnswerChange(question.id, e.target.value)}
-          />
-        );
+        return <Textarea value={val as string || ''} onChange={e => handleAnswerChange(question.id, e.target.value)} rows={2} placeholder="Réponse" className="text-xs" />;
+
       default:
-        return <p className="text-red-500">Type de question non supporté: {question.type}</p>;
+        return <p className="text-red-600 text-xs">Type non supporté : {question.type}</p>;
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    // Validation: check required questions are answered
-    const requiredQuestionsWithoutAnswers: string[] = [];
-    const requiredJustificationsWithoutAnswers: string[] = [];
-
-    for (const section of sectionsWithNested) {
-      for (const sousSection of section.sousSections) {
-        for (const question of sousSection.questions) {
-          // Check if required question has an answer
-          const answerValue = answers[question.id]?.value;
-          if (question.required) {
-            let hasValue = false;
-
-            if (answerValue !== undefined && answerValue !== null) {
-              if (typeof answerValue === 'string') {
-                hasValue = answerValue.trim() !== '';
-              } else if (typeof answerValue === 'boolean') {
-                hasValue = true; // Boolean values are always considered as having a value
-              } else if (Array.isArray(answerValue)) {
-                hasValue = answerValue.length > 0;
-              } else {
-                hasValue = true; // For numbers and other types
-              }
-            }
-
-            if (!hasValue) {
-              requiredQuestionsWithoutAnswers.push(question.label);
-            }
-          }
-
-          // Check if justification is required and missing
-          if (question.justificationRequired &&
-              (answers[question.id]?.justification === undefined ||
-              (typeof answers[question.id]?.justification === 'string' && answers[question.id]?.justification.trim() === ''))) {
-            requiredJustificationsWithoutAnswers.push(question.label);
-          }
-        }
-      }
-    }
-
-    // Show error if there are missing required answers
-    if (requiredQuestionsWithoutAnswers.length > 0 || requiredJustificationsWithoutAnswers.length > 0) {
-      let errorMessage = "Veuillez compléter les champs obligatoires:\n";
-
-      if (requiredQuestionsWithoutAnswers.length > 0) {
-        errorMessage += `- Questions: ${requiredQuestionsWithoutAnswers.slice(0, 3).join(', ')}${requiredQuestionsWithoutAnswers.length > 3 ? '...' : ''}\n`;
-      }
-
-      if (requiredJustificationsWithoutAnswers.length > 0) {
-        errorMessage += `- Justifications: ${requiredJustificationsWithoutAnswers.slice(0, 3).join(', ')}${requiredJustificationsWithoutAnswers.length > 3 ? '...' : ''}`;
-      }
-
-      toast.error(errorMessage);
-      return;
-    }
-
-    try {
-      // Prepare answers to send to the backend
-      const answersToSubmit = Object.entries(answers).map(([questionId, answer]) => {
-        return {
-          questionId,
-          value: answer.value,
-          justification: answer.justification,
-          comment: answer.comment
-        };
-      });
-
-      // Send answers to backend
-      const response = await fetch('http://localhost:9090/api/responses/submit', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${user?.token}` // Using user token from auth context
-        },
-        body: JSON.stringify({
-          responses: answersToSubmit
-        })
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Erreur lors de l'envoi des réponses: ${errorText}`);
-      }
-
-      toast.success('Réponses soumises avec succès!');
-      console.log('Submitted Answers:', answers);
-    } catch (error) {
-      console.error('Erreur de soumission:', error);
-      toast.error('Erreur lors de l\'envoi des réponses');
-    }
+  // Calculer le nombre de réponses dans une sous-section
+  const getSubSectionProgress = (subSection: any) => {
+    const total = subSection.questions.length;
+    const answered = subSection.questions.filter((q: Question) => answers[q.id]?.value !== undefined).length;
+    return { answered, total };
   };
+
+  if (loading) return <div className="flex justify-center items-center h-screen text-xl">Chargement...</div>;
+  if (sections.length === 0) return <div className="text-center py-20 text-lg text-gray-600">Aucune section disponible.</div>;
 
   return (
-    <div className="container mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-8 text-gray-800">Questionnaire Institutionnel</h1>
+    <div className="container mx-auto max-w-6xl p-4">
+      {/* Barre de progression */}
+      <div className="mb-6 bg-white rounded-lg shadow p-4">
+        <div className="flex justify-between text-sm font-medium text-gray-700 mb-2">
+          <span>Section {currentSectionIndex + 1} / {sections.length}</span>
+          <span className="text-green-700">{currentSection.name}</span>
+        </div>
+        <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+          <div
+            className="bg-gradient-to-r from-green-500 to-green-600 h-full rounded-full transition-all duration-500"
+            style={{ width: `${((currentSectionIndex + 1) / sections.length) * 100}%` }}
+          />
+        </div>
+      </div>
 
-      <form onSubmit={handleSubmit} className="space-y-10">
-        {sectionsWithNested.length === 0 ? (
-          <p className="text-gray-600">Aucune question disponible pour le moment.</p>
-        ) : (
-          sectionsWithNested.map((section: SectionWithNested) => (
-            <div key={section.id} className="bg-white shadow-md rounded-lg p-6">
-              <h2 className="text-2xl font-semibold mb-6 text-green-700">{section.name}</h2>
-              {section.sousSections.map((sousSection: SousSectionWithQuestions) => (
-                <div key={sousSection.id} className="mb-8 border-l-4 border-green-200 pl-4">
-                  <h3 className="text-xl font-medium mb-4 text-gray-700">{sousSection.libelle}</h3>
-                  <div className="space-y-6">
-                    {sousSection.questions.map((question: Question) => (
-                      <div key={question.id} className="bg-gray-50 p-4 rounded-md shadow-sm">
-                        <Label htmlFor={question.id} className="block text-lg font-medium text-gray-900 mb-2">
-                          {question.label} {question.required && <span className="text-red-500">*</span>}
-                        </Label>
-                        {question.definition && (
-                          <p className="text-sm text-gray-600 mb-3">{question.definition}</p>
-                        )}
+      {/* Section principale */}
+      <div className="bg-white rounded-lg shadow-lg p-5">
+        <div className="mb-5 pb-3 border-b-2 border-green-600">
+          <div className="flex items-center gap-2">
+            <span className="bg-green-600 text-white px-3 py-1 rounded text-xs font-bold">SECTION</span>
+            <h1 className="text-xl font-bold text-green-800">{currentSection.name}</h1>
+          </div>
+        </div>
 
-                        {renderQuestionInput(question)}
+        {/* Accordéon des sous-sections */}
+        <div className="space-y-2">
+          {currentSection.sousSections.map((ss, index) => {
+            const { answered, total } = getSubSectionProgress(ss);
+            const isOpen = openSubSections[ss.id];
+            const isComplete = answered === total;
 
-                        {question.justificationRequired && (
-                          <div className="mt-4">
-                            <Label htmlFor={`${question.id}-justification`} className="block text-sm font-medium text-gray-700">
-                              Justification {question.justificationRequired && <span className="text-red-500">*</span>}
+            return (
+              <div key={ss.id} className="border border-gray-300 rounded-lg overflow-hidden">
+                {/* En-tête de la sous-section */}
+                <button
+                  onClick={() => toggleSubSection(ss.id)}
+                  className="w-full bg-green-50 p-2.5 flex items-center justify-between hover:bg-green-100 transition-colors"
+                >
+                  <div className="flex items-center gap-2 flex-1">
+                    <span className="bg-green-500 text-white px-2 py-0.5 rounded text-xs font-semibold">
+                      SS{index + 1}
+                    </span>
+                    <h2 className="text-sm font-semibold text-gray-800 text-left">{ss.libelle}</h2>
+                  </div>
+                  
+                  <div className="flex items-center gap-3">
+                    <span className={`text-xs font-medium ${isComplete ? 'text-green-600' : 'text-gray-600'}`}>
+                      {answered}/{total}
+                    </span>
+                    {isComplete && <CheckCircle className="w-4 h-4 text-green-600" />}
+                    {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </div>
+                </button>
+
+                {/* Contenu - Liste des questions */}
+                {isOpen && (
+                  <div className="bg-gray-50 p-2 space-y-2">
+                    {ss.questions.map((q, qIndex) => (
+                      <div key={q.id} className="bg-white border-l-2 border-blue-400 rounded p-2">
+                        {/* Question */}
+                        <div className="mb-2">
+                          <Label className="text-xs font-semibold text-gray-800 flex items-start gap-1">
+                            <span className="text-blue-600 flex-shrink-0">{qIndex + 1}.</span>
+                            <span className="flex-1">
+                              {q.label} 
+                              {q.required && <span className="text-red-600 ml-1">*</span>}
+                            </span>
+                          </Label>
+                          {q.definition && (
+                            <p className="text-xs text-gray-500 italic mt-0.5 ml-4">{q.definition}</p>
+                          )}
+                        </div>
+
+                        {/* Input de réponse */}
+                        <div className="ml-4 bg-gray-50 p-1.5 rounded">
+                          {renderQuestionInput(q)}
+                        </div>
+
+                        {/* Justification */}
+                        {q.justificationRequired && (
+                          <div className="mt-1.5 ml-4 bg-blue-50 p-1.5 rounded border-l-2 border-blue-400">
+                            <Label className="text-xs font-medium text-blue-900 mb-0.5 block">
+                              📝 Justification <span className="text-red-600">*</span>
                             </Label>
                             <Textarea
-                              id={`${question.id}-justification`}
-                              value={answers[question.id]?.justification || ''}
-                              onChange={(e) => handleAnswerChange(question.id, e.target.value, 'justification')}
-                              className="mt-1 block w-full"
+                              value={answers[q.id]?.justification || ''}
+                              onChange={e => handleAnswerChange(q.id, e.target.value, 'justification')}
+                              rows={2}
+                              className="bg-white text-xs"
+                              placeholder="Justifiez..."
                             />
                           </div>
                         )}
 
-                        {question.commentRequired && (
-                          <div className="mt-4">
-                            <Label htmlFor={`${question.id}-comment`} className="block text-sm font-medium text-gray-700">
-                              Commentaire
+                        {/* Commentaire */}
+                        {q.commentRequired && (
+                          <div className="mt-1.5 ml-4 bg-amber-50 p-1.5 rounded border-l-2 border-amber-400">
+                            <Label className="text-xs font-medium text-amber-900 mb-0.5 block">
+                              💬 Commentaire
                             </Label>
                             <Textarea
-                              id={`${question.id}-comment`}
-                              value={answers[question.id]?.comment || ''}
-                              onChange={(e) => handleAnswerChange(question.id, e.target.value, 'comment')}
-                              className="mt-1 block w-full"
+                              value={answers[q.id]?.comment || ''}
+                              onChange={e => handleAnswerChange(q.id, e.target.value, 'comment')}
+                              rows={2}
+                              className="bg-white text-xs"
+                              placeholder="Commentaire..."
                             />
                           </div>
                         )}
                       </div>
                     ))}
                   </div>
-                </div>
-              ))}
-            </div>
-          ))
-        )}
+                )}
+              </div>
+            );
+          })}
+        </div>
 
-        <Button type="submit" className="w-full py-3 text-lg bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors">
-          Soumettre les réponses
-        </Button>
-      </form>
+        {/* Navigation */}
+        <div className="flex justify-between items-center mt-6 pt-4 border-t border-gray-300">
+          <Button onClick={goPrev} disabled={isFirstSection} variant="outline" size="sm" className="px-6">
+            <ChevronLeft className="mr-1 w-4 h-4" /> Précédent
+          </Button>
+
+          <div className="text-xs text-gray-600">
+            {saving && "💾 Sauvegarde..."}
+          </div>
+
+          {isLastSection ? (
+            <Button onClick={handleFinalSubmit} size="sm" className="bg-green-600 hover:bg-green-700 text-white px-8 font-semibold">
+              ✓ Soumettre
+            </Button>
+          ) : (
+            <Button onClick={goNext} size="sm" className="bg-green-600 hover:bg-green-700 text-white px-6">
+              Suivant <ChevronRight className="ml-1 w-4 h-4" />
+            </Button>
+          )}
+        </div>
+      </div>
     </div>
   );
 };

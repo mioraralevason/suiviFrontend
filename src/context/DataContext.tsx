@@ -454,59 +454,68 @@ const useDataStore = () => {
   };
 
   // ✅ Effet pour charger les données au démarrage
-  useEffect(() => {
-    if (token) {
-      loadSectionsWithNested();  // Charge les sections et questions
+  const [dataLoaded, setDataLoaded] = useState(false);
 
-      // Charger les institutions selon le rôle de l'utilisateur
-      if (user?.role === 'admin' || user?.role === 'superviseur') {
-        // Les admins et superviseurs peuvent voir toutes les institutions
-        loadInstitutions();
-      } else if (user?.role === 'institution' && user.institutionId) {
-        // Pour les utilisateurs institution, charger uniquement leur institution
-        loadInstitutionById(user.institutionId);
-      }
+useEffect(() => {
+  if (!token || dataLoaded) return;
+
+  const loadInitialData = async () => {
+    await loadSectionsWithNested();
+
+    if (user?.role === 'admin' || user?.role === 'superviseur') {
+      await loadInstitutions();
+    } else if (user?.role === 'institution' && user.institutionId) {
+      await loadInstitutionById(user.institutionId);
     }
-  }, [token, user]);
 
-  return useMemo(() => ({
+    setDataLoaded(true); // Plus jamais rechargé
+  };
+
+  loadInitialData();
+}, [token, user?.role, user?.institutionId]);
+  // À la toute fin de useDataStore(), juste avant export DataProvider
+return useMemo(() => ({
+  institutions,
+  countries,
+  axes,
+  questions,
+  setQuestions,
+  assessments,
+  sectorWeights,
+  riskThresholds,
+  sectionsWithNested,
+  loadSectionsWithNested,        // OBLIGATOIRE – tu l’avais enlevé !
+  loadInstitutions,
+  loadInstitutionById,
+  getSousSectionsForSection,
+  getQuestionsForSousSection,
+  loadQuestionsForAxis,
+  updateInstitution,
+  addCountry,
+  removeCountry,
+  addQuestion,
+  updateQuestion,
+  deleteQuestion,
+  addAssessment,
+  addSectorWeight,
+  updateSectorWeight,
+  deleteSectorWeight,
+  updateRiskThresholds,
+}), [
     institutions,
     countries,
     axes,
     questions,
-    setQuestions,
     assessments,
     sectorWeights,
     riskThresholds,
-    sectionsWithNested,  // ← Exposé
-    loadSectionsWithNested,  // ← Exposé
-    loadInstitutions,        // ← Exposé
-    loadInstitutionById,     // ← Exposé
-    getSousSectionsForSection,  // ← Exposé
-    getQuestionsForSousSection,  // ← Exposé
-    loadQuestionsForAxis,  // ← Exposé (compatibilité)
-    updateInstitution,
-    addCountry,
-    removeCountry,
-    addQuestion,
-    updateQuestion,
-    deleteQuestion,
-    addAssessment,
-    addSectorWeight,
-    updateSectorWeight,
-    deleteSectorWeight,
-    updateRiskThresholds,
-  }), [
-    institutions, countries, axes, questions, assessments, sectorWeights, riskThresholds, sectionsWithNested
+    sectionsWithNested,
+    loadSectionsWithNested
   ]);
-};
+}; // ← Fermeture de useDataStore()
 
+// EXPORT DU PROVIDER (doit être HORS de useDataStore !)
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const data = useDataStore();
-
-  return (
-    <DataContext.Provider value={data}>
-      {children}
-    </DataContext.Provider>
-  );
+  return <DataContext.Provider value={data}>{children}</DataContext.Provider>;
 };

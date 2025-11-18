@@ -4,10 +4,18 @@ import { API_BASE } from '../config/api';
 
 interface AuthContextType {
   user: User | null;
+  token: string | null;
   login: (email: string, password: string) => Promise<boolean>;
-  register: (email: string, password: string, name: string, role: 'institution' | 'superviseur', adresse?: string) => Promise<boolean>;
+  register: (
+    email: string,
+    password: string,
+    name: string,
+    role: 'institution' | 'superviseur',
+    adresse?: string
+  ) => Promise<boolean>;
   logout: () => void;
   loading: boolean;
+  updateUser?: (user: User) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -22,11 +30,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Charger l'utilisateur depuis localStorage au démarrage
   useEffect(() => {
     const checkUser = async () => {
       try {
         const storedUser = localStorage.getItem('user');
-        if (storedUser) setUser(JSON.parse(storedUser));
+        if (storedUser) {
+          const parsed = JSON.parse(storedUser);
+          setUser(parsed);
+        }
       } catch (error) {
         console.error('Failed to parse user from localStorage', error);
         localStorage.removeItem('user');
@@ -57,13 +69,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const data = await response.json();
       const loggedUser: User = {
-        id: data.idUtilisateur || data.id, // Use the backend field name
+        id: data.idUtilisateur || data.id,
         email,
-        name: data.nom || data.name || email, // Use data.nom if available, otherwise fallback to email
-        role: (data.role && data.role.libelle) ? data.role.libelle as 'institution' | 'superviseur' | 'admin' : data.role || 'institution',
+        name: data.nom || data.name || email,
+        role: (data.role && data.role.libelle)
+          ? (data.role.libelle as 'institution' | 'superviseur' | 'admin')
+          : data.role || 'institution',
         token: data.token,
-        institutionId: data.institutionId || (data.institution && data.institution.idInstitution), // Get from nested institution object if needed
+        institutionId: data.institutionId || (data.institution && data.institution.idInstitution),
       };
+
       saveUser(loggedUser);
       return true;
     } catch (error) {
@@ -88,10 +103,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(errorText || 'Erreur lors de l\'inscription');
+        throw new Error(errorText || "Erreur lors de l'inscription");
       }
 
-      await response.json(); // Réponse récupérée mais non utilisée
+      await response.json();
       return true;
     } catch (error) {
       console.error('Erreur register:', error);
@@ -99,13 +114,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const updateUser = (updatedUser: User) => {
+    saveUser(updatedUser);
+  };
+
   const logout = () => {
     setUser(null);
     localStorage.removeItem('user');
   };
 
+  // Extraire le token depuis user
+  const token = user?.token || null;
+
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, loading }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        token,
+        login,
+        register,     // ← BIEN FOURNI ICI
+        logout,
+        loading,
+        updateUser,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
